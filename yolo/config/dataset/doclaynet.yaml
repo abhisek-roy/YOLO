@@ -1,0 +1,6 @@
+path: /mnt/c/Users/aroy/Projects/DocLayout-YOLO/doclaynet_createml  # Update this path
+train: train
+validation: val
+
+class_num: 11
+class_list: ['Caption', 'Footnote', 'Formula', 'List-item', 'Page-footer', 'Page-header', 'Picture', 'Section-header', 'Table', 'Text', 'Title']

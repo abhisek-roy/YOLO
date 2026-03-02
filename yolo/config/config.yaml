@@ -6,7 +6,7 @@ name: v9-dev
 
 defaults:
   - _self_
-  - task: inference
-  - dataset: coco
+  - task: train             # inference
+  - dataset: doclaynet      # coco doclaynet
   - model: v9-c
   - general
