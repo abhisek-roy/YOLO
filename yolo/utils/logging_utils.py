@@ -21,7 +21,7 @@ import numpy as np
 import torch
 import wandb
 from lightning import LightningModule, Trainer, seed_everything
-from lightning.pytorch.callbacks import Callback, RichModelSummary, RichProgressBar
+from lightning.pytorch.callbacks import Callback, RichModelSummary, RichProgressBar, ModelCheckpoint, EarlyStopping
 from lightning.pytorch.callbacks.progress.rich_progress import CustomProgress
 from lightning.pytorch.loggers import TensorBoardLogger, WandbLogger
 from lightning.pytorch.utilities import rank_zero_only
@@ -284,6 +284,31 @@ def setup(cfg: Config):
     progress.append(YOLORichProgressBar())
     progress.append(YOLORichModelSummary())
     progress.append(ImageLogger())
+
+    # Add ModelCheckpoint to save best models
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=save_path / "checkpoints",
+        filename="best-{epoch:02d}-{map:.4f}",
+        monitor="map",
+        mode="max",
+        save_top_k=3,
+        save_last=True,
+        every_n_epochs=5,
+        verbose=True,
+    )
+    progress.append(checkpoint_callback)
+    
+    # Add EarlyStopping
+    if cfg.task.task == "train":
+        early_stop_callback = EarlyStopping(
+            monitor="map",
+            mode="max",
+            patience=15,
+            min_delta=0.001,
+            verbose=True,
+        )
+        progress.append(early_stop_callback)
+
     if cfg.use_tensorboard:
         loggers.append(TensorBoardLogger(log_graph="all", save_dir=save_path))
     if cfg.use_wandb:
