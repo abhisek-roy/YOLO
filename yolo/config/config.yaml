@@ -2,11 +2,11 @@ hydra:
   run:
     dir: runs/${task.task}/${name}
 
-name: v9-dev
+name: v9-c
 
 defaults:
   - _self_
-  - task: train             # inference
+  - task: train             # inference validation
   - dataset: doclaynet      # coco doclaynet
   - model: v9-c
   - general

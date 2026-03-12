@@ -2,13 +2,13 @@ accelerator: auto
 device: auto
 cpu_num: 16
 
-image_size: [640, 640]
+image_size: [1024, 1024]
 
 out_path: runs
 exist_ok: True
 
 lucky_number: 10
 use_wandb: True
-use_tensorboard: False
+use_tensorboard: True
 
 weight: True # Path to weight or True for auto, False for no pretrained weight

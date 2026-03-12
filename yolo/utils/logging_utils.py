@@ -285,6 +285,7 @@ def setup(cfg: Config):
     progress.append(YOLORichModelSummary())
     progress.append(ImageLogger())
 
+
     # Add ModelCheckpoint to save best models
     checkpoint_callback = ModelCheckpoint(
         dirpath=save_path / "checkpoints",
@@ -293,17 +294,17 @@ def setup(cfg: Config):
         mode="max",
         save_top_k=3,
         save_last=True,
-        every_n_epochs=5,
+        every_n_epochs=1,
         verbose=True,
     )
     progress.append(checkpoint_callback)
-    
+
     # Add EarlyStopping
     if cfg.task.task == "train":
         early_stop_callback = EarlyStopping(
             monitor="map",
             mode="max",
-            patience=15,
+            patience=10,
             min_delta=0.001,
             verbose=True,
         )
