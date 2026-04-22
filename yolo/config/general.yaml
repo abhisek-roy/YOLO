@@ -1,6 +1,6 @@
 accelerator: auto
 device: auto
-cpu_num: 16
+cpu_num: 16 # 60
 
 image_size: [1024, 1024]
 
