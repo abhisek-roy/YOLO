@@ -1,23 +1,46 @@
 import Foundation
 import CoreML
 import UIKit
+import Playgrounds
 
 /// Complete YOLO detector with CoreML model
+/// TODO:  Understand the steps, Introduce concurrency
 class YOLODetector {
     
     private let model: MLModel
     private let postProcessor: PostProcessor
     private let classNames: [String]
     
-    /// Initialize detector
+    /// Initialize detector using the generated Core ML model class.
     /// - Parameters:
-    ///   - modelURL: URL to .mlpackage file
+    ///   - classNames: Array of class names
+    ///   - minConfidence: Minimum confidence threshold
+    ///   - minIOU: NMS IOU threshold
+    init(classNames: [String], minConfidence: Float = 0.25, minIOU: Float = 0.45) throws {
+        let config = MLModelConfiguration()
+        config.computeUnits = .all  // Use Neural Engine if available
+        self.model = try YOLOv9_DocLayNet(configuration: config).model
+        
+        // Initialize post-processor
+        self.postProcessor = PostProcessor.forDocLayNet(
+            minConfidence: minConfidence,
+            minIOU: minIOU
+        )
+        
+        self.classNames = classNames
+        
+        print("✅ YOLODetector initialized")
+        print("  Model: YOLOv9_DocLayNet")
+        print("  Classes: \(classNames.count)")
+    }
+
+    /// Initialize detector from a model URL (useful for tests or custom bundles).
+    /// - Parameters:
+    ///   - modelURL: URL to .mlmodelc directory
     ///   - classNames: Array of class names
     ///   - minConfidence: Minimum confidence threshold
     ///   - minIOU: NMS IOU threshold
     init(modelURL: URL, classNames: [String], minConfidence: Float = 0.25, minIOU: Float = 0.45) throws {
-        
-        // Load CoreML model
         let config = MLModelConfiguration()
         config.computeUnits = .all  // Use Neural Engine if available
         self.model = try MLModel(contentsOf: modelURL, configuration: config)
@@ -46,11 +69,11 @@ class YOLODetector {
         
         // Step 1: Preprocess image
         guard let resizedImage = image.resize(to: CGSize(width: 1024, height: 1024)) else {
-            throw DetectorError.preprocessingFailed
+            throw YOLODetectorError.preprocessingFailed
         }
         
         guard let pixelBuffer = resizedImage.pixelBuffer() else {
-            throw DetectorError.pixelBufferCreationFailed
+            throw YOLODetectorError.pixelBufferCreationFailed
         }
         
         // Step 2: Run CoreML model
@@ -75,7 +98,13 @@ class YOLODetector {
         
         // Step 5: Add class names
         let results = detections.map { detection in
-            let className = classNames[detection.classIndex]
+            let className: String
+            if detection.classIndex < classNames.count {
+                className = classNames[detection.classIndex]
+            } else {
+                className = "Unknown(\(detection.classIndex))"
+                print("⚠️ Class index \(detection.classIndex) out of range for classNames (\(classNames.count)).")
+            }
             return (className: className, detection: detection)
         }
         
@@ -87,7 +116,7 @@ class YOLODetector {
 
 // MARK: - Errors
 
-enum DetectorError: Error {
+enum YOLODetectorError: Error {
     case preprocessingFailed
     case pixelBufferCreationFailed
     case modelPredictionFailed
@@ -150,4 +179,18 @@ extension UIImage {
         
         return buffer
     }
+}
+
+#Playground {
+    // DocLayNet class names
+    let classNames = [
+        "Caption", "Footnote", "Formula", "List-item", "Page-footer",
+        "Page-header", "Picture", "Section-header", "Table", "Text", "Title"
+    ]
+    
+
+//    let detector = try? YOLODetector(classNames: classNames)
+    let image = UIImage(named: "IMG_0875")!
+
+//    let results = try? detector?.detect(image: image)
 }

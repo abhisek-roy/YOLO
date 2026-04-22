@@ -61,17 +61,24 @@ class GridDecoder {
         var allBoxes: [CGRect] = []
         
         let outputKeys = outputs.keys.sorted()
+        print("Output keys: \(outputKeys)")
+        for (key, value) in outputs.sorted(by: {$0.key < $1.key}) {
+            print("\(key): \(value.shape)")
+        }
         
-        for scaleIdx in 0..<3 {
-            let baseIdx = scaleIdx * 3
-            
-            // Get outputs for this scale
-            guard baseIdx + 2 < outputKeys.count,
-                  let classPred = outputs[outputKeys[baseIdx]],      // class predictions
-                  let boxDist = outputs[outputKeys[baseIdx + 1]],    // box distribution (not used in v9)
-                  let boxCoord = outputs[outputKeys[baseIdx + 2]]    // box coordinates
+        let scaleOutputs = [
+            (scaleIdx: 0, classIdx: 3, boxIdx: 4), // 128x128 grid (stride 8)
+            (scaleIdx: 1, classIdx: 5, boxIdx: 6), //
+            (scaleIdx: 2, classIdx: 7, boxIdx: 8), //
+        ]
+        
+        for mapping in scaleOutputs {
+            guard mapping.classIdx < outputKeys.count,
+                  mapping.boxIdx < outputKeys.count,
+                  let classPred = outputs[outputKeys[mapping.classIdx]],
+                  let boxCoord = outputs[outputKeys[mapping.boxIdx]]
             else {
-                print("⚠️ Missing outputs for scale \(scaleIdx)")
+                print("Missing outputs for scale \(mapping.scaleIdx)")
                 continue
             }
             
@@ -79,7 +86,7 @@ class GridDecoder {
             let (scaleClassScores, scaleBoxes) = decodeScale(
                 classPred: classPred,
                 boxCoord: boxCoord,
-                scaleIndex: scaleIdx
+                scaleIndex: mapping.scaleIdx
             )
             
             allClassScores.append(contentsOf: scaleClassScores)
@@ -94,56 +101,68 @@ class GridDecoder {
         
         // classPred shape: [1, numClasses, gridH, gridW]
         // boxCoord shape:  [1, 4, gridH, gridW]
-        
+        print("classPred.shape: \(classPred.shape)")
+        print("boxCoord.shape: \(boxCoord.shape)")
+
         let numClasses = classPred.shape[1].intValue
         let gridH = classPred.shape[2].intValue
         let gridW = classPred.shape[3].intValue
-        let numAnchors = gridH * gridW
-        
-        var classScores: [[Float]] = []
-        var boxes: [CGRect] = []
         
         let anchors = anchorGrids[scaleIndex]
         let strides = scalers[scaleIndex]
         
+        // Debug: Check dimensions match
+        let expectedAnchors = gridH * gridW
+        print(
+            "   Scale \(scaleIndex): grid=\(gridW)*\(gridH), anchors=\(anchors.count), expected=\(expectedAnchors)"
+        )
+        
+        guard anchors.count == expectedAnchors else {
+            print("   Anchor count mismatch! Expected \(expectedAnchors), got \(anchors.count)")
+            return([],[])
+        }
+        
+        var classScores:[[Float]] = []
+        var boxes: [CGRect] = []
+        
         // Iterate through each grid cell
-        for gridY in 0..<gridH {
-            for gridX in 0..<gridW {
-                let anchorIdx = gridY * gridW + gridX
-                let anchor = anchors[anchorIdx]
-                let stride = strides[anchorIdx]
-                
-                // Extract class scores for this grid cell
-                var scores: [Float] = []
-                for c in 0..<numClasses {
-                    let idx = [0, c, gridY, gridX] as [NSNumber]
-                    let score = classPred[idx].floatValue
-                    scores.append(score)
-                }
-                
-                // Extract box coordinates (LTRB format: left, top, right, bottom distances)
-                let leftIdx = [0, 0, gridY, gridX] as [NSNumber]
-                let topIdx = [0, 1, gridY, gridX] as [NSNumber]
-                let rightIdx = [0, 2, gridY, gridX] as [NSNumber]
-                let bottomIdx = [0, 3, gridY, gridX] as [NSNumber]
-                
-                let left = boxCoord[leftIdx].floatValue * stride
-                let top = boxCoord[topIdx].floatValue * stride
-                let right = boxCoord[rightIdx].floatValue * stride
-                let bottom = boxCoord[bottomIdx].floatValue * stride
-                
-                // Decode to absolute coordinates
-                // Python: preds_box = torch.cat([self.anchor_grid - lt, self.anchor_grid + rb], dim=-1)
-                let xMin = Float(anchor.x) - left
-                let yMin = Float(anchor.y) - top
-                let xMax = Float(anchor.x) + right
-                let yMax = Float(anchor.y) + bottom
-                
-                let box = CGRect.fromMinMax(xMin: xMin, yMin: yMin, xMax: xMax, yMax: yMax)
-                
-                classScores.append(scores)
-                boxes.append(box)
+        for anchorIdx in 0..<anchors.count {
+            let gridY = anchorIdx / gridW
+            let gridX = anchorIdx % gridW
+            
+            let anchor = anchors[anchorIdx]
+            let stride = strides[anchorIdx]
+            
+            // Extract class scores from this grid cell
+            var scores: [Float] = []
+            for c in 0..<numClasses {
+                let idx = [0, c, gridY, gridX] as [NSNumber]
+                let score = classPred[idx].floatValue
+                scores.append(score)
             }
+            
+            // Extract box coordinates (LTRB format)
+            let leftIdx = [0, 0, gridY, gridX] as [NSNumber]
+            let topIdx = [0, 1, gridY, gridX] as [NSNumber]
+            let rightIdx = [0, 2, gridY, gridX] as [NSNumber]
+            let bottomIdx = [0, 3, gridY, gridX] as [NSNumber]
+            
+            let left = boxCoord[leftIdx].floatValue * stride
+            let top = boxCoord[topIdx].floatValue * stride
+            let right = boxCoord[rightIdx].floatValue * stride
+            let bottom = boxCoord[bottomIdx].floatValue * stride
+            
+            // Decode to absolute coordinates
+            let xMin = Float(anchor.x) - left
+            let yMin = Float(anchor.y) - top
+            let xMax = Float(anchor.x) + right
+            let yMax = Float(anchor.y) + bottom
+            
+            let box = CGRect.fromMinMax(xMin: xMin, yMin: yMin, xMax: xMax, yMax: yMax)
+            
+            classScores.append(scores)
+            boxes.append(box)
+
         }
         
         return (classScores, boxes)
